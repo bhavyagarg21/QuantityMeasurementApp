@@ -69,7 +69,7 @@ public class UC3 {
     public static void main(String[] args){
         Length l1=new Length(1.0, Length.LengthUnit.Feet);
         Length l2 = new Length(12.0, Length.LengthUnit.Inches);
-        l1.equals(l2);
+        System.out.println(l1.equals(l2));
 
         demonstrateFeetEquality();
         demonstrateInchesEquality();
