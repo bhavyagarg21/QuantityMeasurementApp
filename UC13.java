@@ -231,8 +231,8 @@ public class UC13 {
         Quantity<LengthUnit> l2 = new Quantity<>(12.0, LengthUnit.INCHES);
 
         System.out.println(compare(l1, l2));
-        System.out.println(add(l1, l2));
         System.out.println(subtract(l1, l2));
+         System.out.println(add(l1, l2));
         System.out.println(divide(l1, l2));
 
         Quantity<WeightUnit> w1 = new Quantity<>(5.0, WeightUnit.KILOGRAM);
