@@ -1,10 +1,24 @@
 import java.util.function.DoubleBinaryOperator;
 
+@FunctionalInterface
+interface SupportsArithmetic {
+    boolean isSupported();
+}
+
 interface IMeasurable {
     double getConversionFactor();
     double convertToBaseUnit(double value);
     double convertFromBaseUnit(double baseValue);
     String getUnitName();
+
+    SupportsArithmetic supportsArithmetic = () -> true;
+
+    default boolean supportsArithmetic() {
+        return supportsArithmetic.isSupported();
+    }
+
+    default void validateOperationSupport(String operation) {
+    }
 }
 
 enum ArithmeticOperation {
@@ -111,6 +125,38 @@ enum VolumeUnit implements IMeasurable {
     }
 }
 
+enum TemperatureUnit implements IMeasurable {
+    CELSIUS {
+        public double getConversionFactor() { return 1.0; }
+        public double convertToBaseUnit(double value) { return value; }
+        public double convertFromBaseUnit(double baseValue) { return baseValue; }
+    },
+    FAHRENHEIT {
+        public double getConversionFactor() { return 1.0; }
+        public double convertToBaseUnit(double value) { return (value - 32) * 5 / 9; }
+        public double convertFromBaseUnit(double baseValue) { return (baseValue * 9 / 5) + 32; }
+    },
+    KELVIN {
+        public double getConversionFactor() { return 1.0; }
+        public double convertToBaseUnit(double value) { return value - 273.15; }
+        public double convertFromBaseUnit(double baseValue) { return baseValue + 273.15; }
+    };
+
+    private final SupportsArithmetic supportsArithmetic = () -> false;
+
+    public boolean supportsArithmetic() {
+        return supportsArithmetic.isSupported();
+    }
+
+    public void validateOperationSupport(String operation) {
+        throw new UnsupportedOperationException("Temperature does not support " + operation);
+    }
+
+    public String getUnitName() {
+        return name().toLowerCase();
+    }
+}
+
 class Quantity<U extends Enum<U> & IMeasurable> {
     private final double value;
     private final U unit;
@@ -130,18 +176,19 @@ class Quantity<U extends Enum<U> & IMeasurable> {
         return Math.round(val * 100.0) / 100.0;
     }
 
-    private void validateArithmeticOperands(Quantity<U> other, U targetUnit, boolean targetRequired) {
+    private void validateArithmeticOperands(Quantity<U> other, String operation) {
         if (other == null) throw new IllegalArgumentException("Quantity cannot be null");
         if (this.unit.getClass() != other.unit.getClass())
             throw new IllegalArgumentException("Incompatible units");
         if (!Double.isFinite(other.value))
             throw new IllegalArgumentException("Invalid value");
-        if (targetRequired && targetUnit == null)
-            throw new IllegalArgumentException("Target unit required");
+
+        if (!unit.supportsArithmetic())
+            unit.validateOperationSupport(operation);
     }
 
-    private double performBaseArithmetic(Quantity<U> other, ArithmeticOperation operation) {
-        validateArithmeticOperands(other, null, false);
+    private double performBaseArithmetic(Quantity<U> other, ArithmeticOperation operation, String opName) {
+        validateArithmeticOperands(other, opName);
         return operation.compute(this.toBase(), other.toBase());
     }
 
@@ -170,25 +217,15 @@ class Quantity<U extends Enum<U> & IMeasurable> {
     }
 
     public Quantity<U> add(Quantity<U> other) {
-        return fromBase(performBaseArithmetic(other, ArithmeticOperation.ADD), this.unit);
-    }
-
-    public Quantity<U> add(Quantity<U> other, U targetUnit) {
-        validateArithmeticOperands(other, targetUnit, true);
-        return fromBase(performBaseArithmetic(other, ArithmeticOperation.ADD), targetUnit);
+        return fromBase(performBaseArithmetic(other, ArithmeticOperation.ADD, "addition"), this.unit);
     }
 
     public Quantity<U> subtract(Quantity<U> other) {
-        return fromBase(performBaseArithmetic(other, ArithmeticOperation.SUBTRACT), this.unit);
-    }
-
-    public Quantity<U> subtract(Quantity<U> other, U targetUnit) {
-        validateArithmeticOperands(other, targetUnit, true);
-        return fromBase(performBaseArithmetic(other, ArithmeticOperation.SUBTRACT), targetUnit);
+        return fromBase(performBaseArithmetic(other, ArithmeticOperation.SUBTRACT, "subtraction"), this.unit);
     }
 
     public double divide(Quantity<U> other) {
-        return performBaseArithmetic(other, ArithmeticOperation.DIVIDE);
+        return performBaseArithmetic(other, ArithmeticOperation.DIVIDE, "division");
     }
 
     @Override
@@ -197,58 +234,19 @@ class Quantity<U extends Enum<U> & IMeasurable> {
     }
 }
 
-public class UC13 {
-    public static <U extends Enum<U> & IMeasurable> boolean compare(Quantity<U> q1, Quantity<U> q2) {
-        return q1.equals(q2);
-    }
-
-    public static <U extends Enum<U> & IMeasurable> Quantity<U> add(Quantity<U> q1, Quantity<U> q2) {
-        return q1.add(q2);
-    }
-
-    public static <U extends Enum<U> & IMeasurable> Quantity<U> add(Quantity<U> q1, Quantity<U> q2, U target) {
-        return q1.add(q2, target);
-    }
-
-    public static <U extends Enum<U> & IMeasurable> Quantity<U> subtract(Quantity<U> q1, Quantity<U> q2) {
-        return q1.subtract(q2);
-    }
-
-    public static <U extends Enum<U> & IMeasurable> Quantity<U> subtract(Quantity<U> q1, Quantity<U> q2, U target) {
-        return q1.subtract(q2, target);
-    }
-
-    public static <U extends Enum<U> & IMeasurable> double divide(Quantity<U> q1, Quantity<U> q2) {
-        return q1.divide(q2);
-    }
-
-    public static <U extends Enum<U> & IMeasurable> Quantity<U> convert(Quantity<U> q, U target) {
-        return q.convertTo(target);
-    }
-
+public class UC14 {
     public static void main(String[] args) {
-        Quantity<LengthUnit> l1 = new Quantity<>(1.0, LengthUnit.FEET);
-        Quantity<LengthUnit> l2 = new Quantity<>(12.0, LengthUnit.INCHES);
 
-        System.out.println(compare(l1, l2));
-        System.out.println(subtract(l1, l2));
-         System.out.println(add(l1, l2));
-        System.out.println(divide(l1, l2));
+        Quantity<TemperatureUnit> t1 = new Quantity<>(0.0, TemperatureUnit.CELSIUS);
+        Quantity<TemperatureUnit> t2 = new Quantity<>(32.0, TemperatureUnit.FAHRENHEIT);
 
-        Quantity<WeightUnit> w1 = new Quantity<>(5.0, WeightUnit.KILOGRAM);
-        Quantity<WeightUnit> w2 = new Quantity<>(2000.0, WeightUnit.GRAM);
+        System.out.println(t1.equals(t2));
+        System.out.println(t1.convertTo(TemperatureUnit.FAHRENHEIT));
+        System.out.println(t2.convertTo(TemperatureUnit.CELSIUS));
 
-        System.out.println(compare(w1, w2));
-        System.out.println(add(w1, w2));
-        System.out.println(subtract(w1, w2));
-        System.out.println(divide(w1, w2));
+        Quantity<TemperatureUnit> t3 = new Quantity<>(273.15, TemperatureUnit.KELVIN);
+        System.out.println(t3.equals(t1));
 
-        Quantity<VolumeUnit> v1 = new Quantity<>(1.0, VolumeUnit.LITRE);
-        Quantity<VolumeUnit> v2 = new Quantity<>(500.0, VolumeUnit.MILLILITRE);
-
-        System.out.println(compare(v1, v2));
-        System.out.println(add(v1, v2));
-        System.out.println(subtract(v1, v2));
-        System.out.println(divide(v1, v2));
+        System.out.println(t1.add(t2)); 
     }
 }
